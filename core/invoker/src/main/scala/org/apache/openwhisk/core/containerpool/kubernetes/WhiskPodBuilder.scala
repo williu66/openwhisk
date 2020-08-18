@@ -41,7 +41,8 @@ class WhiskPodBuilder(client: NamespacedKubernetesClient,
                    image: String,
                    memory: ByteSize,
                    environment: Map[String, String],
-                   labels: Map[String, String])(implicit transid: TransactionId): Pod = {
+                   labels: Map[String, String],
+                   nodeAffinities: Map[String, String])(implicit transid: TransactionId): Pod = {
     val envVars = environment.map {
       case (key, value) => new EnvVarBuilder().withName(key).withValue(value).build()
     }.toSeq
@@ -67,17 +68,40 @@ class WhiskPodBuilder(client: NamespacedKubernetesClient,
         .editOrNewAffinity()
         .editOrNewNodeAffinity()
         .editOrNewRequiredDuringSchedulingIgnoredDuringExecution()
-      affinity
         .addNewNodeSelectorTerm()
+
+      affinity
         .addNewMatchExpression()
         .withKey(userPodNodeAffinity.key)
         .withOperator("In")
         .withValues(userPodNodeAffinity.value)
         .endMatchExpression()
+
+      if (!nodeAffinities.isEmpty) {
+        nodeAffinities.foreach(
+          k => affinity
+            .addNewMatchExpression()
+            .withKey(k._1.replace("\"", ""))
+            .withOperator("In")
+            .withValues(k._2.replace("\"", ""))
+            .endMatchExpression()
+          )
+      }
+
+      affinity
         .endNodeSelectorTerm()
         .endRequiredDuringSchedulingIgnoredDuringExecution()
         .endNodeAffinity()
         .endAffinity()
+
+      if (!nodeAffinities.isEmpty) {
+        nodeAffinities.foreach(
+          k => {
+            specBuilder.addNewToleration("NoSchedule", k._1.replace("\"", ""), "Equal"
+              , null, k._2.replace("\"", ""))
+          }
+        )
+      }
     }
 
     val containerBuilder = if (specBuilder.hasMatchingContainer(actionContainerPredicate)) {

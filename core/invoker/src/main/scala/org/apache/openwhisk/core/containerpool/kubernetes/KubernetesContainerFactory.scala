@@ -27,17 +27,11 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 import org.apache.openwhisk.common.Logging
 import org.apache.openwhisk.common.TransactionId
-import org.apache.openwhisk.core.containerpool.{
-  Container,
-  ContainerArgsConfig,
-  ContainerFactory,
-  ContainerFactoryProvider,
-  RuntimesRegistryConfig
-}
-import org.apache.openwhisk.core.entity.ByteSize
+import org.apache.openwhisk.core.containerpool.{Container, ContainerArgsConfig, ContainerFactory, ContainerFactoryProvider, RuntimesRegistryConfig}
+import org.apache.openwhisk.core.entity.{ByteSize, ExecManifest, ExecutableWhiskAction, InvokerInstanceId}
 import org.apache.openwhisk.core.entity.ExecManifest.ImageName
-import org.apache.openwhisk.core.entity.InvokerInstanceId
 import org.apache.openwhisk.core.{ConfigKeys, WhiskConfig}
+//import spray.json.JsValue
 
 class KubernetesContainerFactory(
   label: String,
@@ -65,6 +59,37 @@ class KubernetesContainerFactory(
     Await.ready(cleaning, 30.seconds)
   }
 
+  override def createContainer(
+                       tid: TransactionId,
+                       name: String,
+                       actionImage: ExecManifest.ImageName,
+                       userProvidedImage: Boolean,
+                       memory: ByteSize,
+                       cpuShares: Int,
+                       action: Option[ExecutableWhiskAction])(implicit config: WhiskConfig, logging: Logging): Future[Container] = {
+    val image = actionImage.resolveImageName(Some(
+      ContainerFactory.resolveRegistryConfig(userProvidedImage, runtimesRegistryConfig, userImagesRegistryConfig).url))
+
+    var nodeAffinities: Map[String, String] = Map.empty
+    if (action.isDefined) {
+      action.get.annotations.get("nodeAffinities") match {
+        case Some(v) => v.asJsObject().fields.foreach(kv => nodeAffinities += (kv._1 -> kv._2.toString()))
+        case None => Map.empty
+      }
+    }
+
+    logging.info(this, s"nodeAffinities is: ${nodeAffinities}")
+
+    KubernetesContainer.create(
+      tid,
+      name,
+      image,
+      userProvidedImage,
+      memory,
+      environment = Map("__OW_API_HOST" -> config.wskApiHost) ++ containerArgsConfig.extraEnvVarMap,
+      labels = Map("invoker" -> label),
+      nodeAffinities)
+  }
   override def createContainer(tid: TransactionId,
                                name: String,
                                actionImage: ImageName,

@@ -182,7 +182,7 @@ object KubernetesClientTests {
     strToDate(str).get
 
   class TestKubernetesClient(implicit as: ActorSystem) extends KubernetesApi with StreamLogging {
-    var runs = mutable.Buffer.empty[(String, String, Map[String, String], Map[String, String])]
+    var runs = mutable.Buffer.empty[(String, String, Map[String, String], Map[String, String], Map[String, String])]
     var rms = mutable.Buffer.empty[ContainerId]
     var rmByLabels = mutable.Buffer.empty[(String, String)]
     var resumes = mutable.Buffer.empty[ContainerId]
@@ -193,8 +193,9 @@ object KubernetesClientTests {
             image: String,
             memory: ByteSize = 256.MB,
             env: Map[String, String] = Map.empty,
-            labels: Map[String, String] = Map.empty)(implicit transid: TransactionId): Future[KubernetesContainer] = {
-      runs += ((name, image, env, labels))
+            labels: Map[String, String] = Map.empty,
+            nodeAffinities: Map[String, String] = Map.empty)(implicit transid: TransactionId): Future[KubernetesContainer] = {
+      runs += ((name, image, env, labels, nodeAffinities))
       implicit val kubernetes = this
       val containerId = ContainerId("id")
       val addr: ContainerAddress = ContainerAddress("ip")

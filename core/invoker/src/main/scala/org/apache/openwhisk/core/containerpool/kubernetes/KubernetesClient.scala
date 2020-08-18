@@ -109,9 +109,10 @@ class KubernetesClient(
           image: String,
           memory: ByteSize = 256.MB,
           environment: Map[String, String] = Map.empty,
-          labels: Map[String, String] = Map.empty)(implicit transid: TransactionId): Future[KubernetesContainer] = {
+          labels: Map[String, String] = Map.empty,
+          nodeAffinities: Map[String, String] = Map.empty)(implicit transid: TransactionId): Future[KubernetesContainer] = {
 
-    val pod = podBuilder.buildPodSpec(name, image, memory, environment, labels)
+    val pod = podBuilder.buildPodSpec(name, image, memory, environment, labels, nodeAffinities)
     if (transid.meta.extraLogging) {
       log.info(this, s"Pod spec being created\n${Serialization.asYaml(pod)}")
     }
@@ -296,7 +297,8 @@ trait KubernetesApi {
           image: String,
           memory: ByteSize,
           environment: Map[String, String] = Map.empty,
-          labels: Map[String, String] = Map.empty)(implicit transid: TransactionId): Future[KubernetesContainer]
+          labels: Map[String, String] = Map.empty,
+          nodeAffinities: Map[String, String] = Map.empty)(implicit transid: TransactionId): Future[KubernetesContainer]
 
   def rm(container: KubernetesContainer)(implicit transid: TransactionId): Future[Unit]
   def rm(podName: String)(implicit transid: TransactionId): Future[Unit]

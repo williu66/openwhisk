@@ -135,6 +135,7 @@ class KubernetesContainerTests
     val userProvidedImage = false
     val environment = Map("test" -> "hi")
     val labels = Map("invoker" -> "0")
+    val nodeAffinities = Map("gpu" -> "0")
     val name = "my_Container(1)"
     val container = KubernetesContainer.create(
       transid = transid,
@@ -142,6 +143,7 @@ class KubernetesContainerTests
       userProvidedImage = userProvidedImage,
       environment = environment,
       labels = labels,
+      nodeAffinities = nodeAffinities,
       name = name)
 
     await(container)
@@ -149,11 +151,12 @@ class KubernetesContainerTests
     kubernetes.runs should have size 1
     kubernetes.rms should have size 0
 
-    val (testName, testImage, testEnv, testLabel) = kubernetes.runs.head
+    val (testName, testImage, testEnv, testLabel, testNodeAffinities) = kubernetes.runs.head
     testName shouldBe "my-container1"
     testImage shouldBe image
     testEnv shouldBe environment
     testLabel shouldBe labels
+    testNodeAffinities shouldBe nodeAffinities
   }
 
   it should "pull a user provided image before creating the container" in {
@@ -174,7 +177,8 @@ class KubernetesContainerTests
         image: String,
         memory: ByteSize = 256.MB,
         env: Map[String, String] = Map.empty,
-        labels: Map[String, String] = Map.empty)(implicit transid: TransactionId): Future[KubernetesContainer] = {
+        labels: Map[String, String] = Map.empty,
+        nodeAffinities: Map[String, String] = Map.empty)(implicit transid: TransactionId): Future[KubernetesContainer] = {
         Future.failed(ProcessUnsuccessfulException(ExitStatus(1), "", ""))
       }
     }

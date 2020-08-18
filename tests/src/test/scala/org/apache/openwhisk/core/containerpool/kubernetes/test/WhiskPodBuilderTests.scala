@@ -104,7 +104,7 @@ class WhiskPodBuilderTests extends FlatSpec with Matchers with KubeClientSupport
   }
 
   private def assertPodSettings(builder: WhiskPodBuilder): Pod = {
-    val pod = builder.buildPodSpec(name, testImage, memLimit, Map("foo" -> "bar"), Map("fooL" -> "barV"))
+    val pod = builder.buildPodSpec(name, testImage, memLimit, Map("foo" -> "bar"), Map("fooL" -> "barV"), Map("fooA" -> "barAV"))
     withClue(Serialization.asYaml(pod)) {
       val c = getActionContainer(pod)
       c.getEnv.asScala.exists(_.getName == "foo") shouldBe true
@@ -115,7 +115,7 @@ class WhiskPodBuilderTests extends FlatSpec with Matchers with KubeClientSupport
       c.getImage shouldBe testImage
 
       pod.getMetadata.getLabels.asScala.get("name") shouldBe Some(name)
-      pod.getMetadata.getLabels.asScala.get("fooL") shouldBe Some("barV")
+      pod.getMetadata.getLabels.asScala.get("fooL") shouldBe Some("baraV")
       pod.getMetadata.getName shouldBe name
       pod.getSpec.getRestartPolicy shouldBe "Always"
 
@@ -124,6 +124,10 @@ class WhiskPodBuilderTests extends FlatSpec with Matchers with KubeClientSupport
           pod.getSpec.getAffinity.getNodeAffinity.getRequiredDuringSchedulingIgnoredDuringExecution.getNodeSelectorTerms.asScala
         terms.exists(_.getMatchExpressions.asScala.exists(_.getKey == affinity.key)) shouldBe true
       }
+
+      val terms =
+        pod.getSpec.getAffinity.getNodeAffinity.getRequiredDuringSchedulingIgnoredDuringExecution.getNodeSelectorTerms.asScala
+      terms.exists(_.getMatchExpressions.asScala.exists(_.getKey == "fooA")) shouldBe true
     }
     pod
   }

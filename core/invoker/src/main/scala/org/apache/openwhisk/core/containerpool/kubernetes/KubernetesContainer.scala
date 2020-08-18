@@ -59,7 +59,8 @@ object KubernetesContainer {
              userProvidedImage: Boolean = false,
              memory: ByteSize = 256.MB,
              environment: Map[String, String] = Map.empty,
-             labels: Map[String, String] = Map.empty)(implicit kubernetes: KubernetesApi,
+             labels: Map[String, String] = Map.empty,
+             nodeAffinities: Map[String, String] = Map.empty)(implicit kubernetes: KubernetesApi,
                                                       ec: ExecutionContext,
                                                       log: Logging): Future[KubernetesContainer] = {
     implicit val tid = transid
@@ -69,7 +70,7 @@ object KubernetesContainer {
     val podName = if (origName.endsWith("-")) origName.reverse.dropWhile(_ == '-').reverse else origName
 
     for {
-      container <- kubernetes.run(podName, image, memory, environment, labels).recoverWith {
+      container <- kubernetes.run(podName, image, memory, environment, labels, nodeAffinities).recoverWith {
         case _ =>
           kubernetes
             .rm(podName)
