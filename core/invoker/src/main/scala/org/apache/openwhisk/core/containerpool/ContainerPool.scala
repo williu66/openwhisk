@@ -57,9 +57,10 @@ case object EmitMetrics
  * @param poolConfig config for the ContainerPool
  */
 class ContainerPool(childFactory: ActorRefFactory => ActorRef,
+                    containerFactory: ContainerFactory,
                     feed: ActorRef,
                     prewarmConfig: List[PrewarmingConfig] = List.empty,
-                    poolConfig: ContainerPoolConfig)
+                    var poolConfig: ContainerPoolConfig)
     extends Actor {
   import ContainerPool.memoryConsumptionOf
 
@@ -79,6 +80,27 @@ class ContainerPool(childFactory: ActorRefFactory => ActorRef,
   val logMessageInterval = 10.seconds
   //periodically emit metrics (don't need to do this for each message!)
   context.system.scheduler.schedule(30.seconds, 10.seconds, self, EmitMetrics)
+
+  context.system.scheduler.schedule(30.seconds, 30.seconds){
+    try {
+      var totalMemory = containerFactory.getInvokerNodesTotalMemory() / 2
+      logging.info(this,
+        s"""
+           |------> getInvokerNodesTotalMemory
+           |last userMemory: ${poolConfig.userMemory.toMB} MB
+           |current userMemory: ${totalMemory.toMB} MB
+           |""".stripMargin)
+      if (poolConfig.userMemory != totalMemory) {
+        poolConfig.userMemory = totalMemory
+
+        val newDockerCount = ((totalMemory.toMB - memoryConsumptionOf(busyPool)) / 512).toInt
+        feed ! MessageFeed.ContainerPoolMemoryChanged(newDockerCount)
+      }
+
+    } catch {
+      case e: Exception => logging.warn(this, s""" getInvokerNodesTotalMemory exception: ${e}""")
+    }
+  }
 
   backfillPrewarms(true)
 
@@ -117,6 +139,20 @@ class ContainerPool(childFactory: ActorRefFactory => ActorRef,
           //remove from resent tracking - it may get resent again, or get processed
           resent = None
         }
+
+        logging.info(
+          this,
+          s"""
+             |------>
+             |total space: ${poolConfig.userMemory.toMB}
+             |busyPool space: ${memoryConsumptionOf(busyPool)}
+             |busyPool size: ${busyPool.size}
+             |freePool size: ${freePool.size}
+             |runBuffer size: ${runBuffer.size}
+             |action memory: ${r.action.limits.memory.megabytes.MB}
+             |run: ${r}
+             |""".stripMargin)
+
         val createdContainer =
           // Is there enough space on the invoker for this action to be executed.
           if (hasPoolSpaceFor(busyPool, r.action.limits.memory.megabytes.MB)) {
@@ -500,10 +536,11 @@ object ContainerPool {
   }
 
   def props(factory: ActorRefFactory => ActorRef,
+            containerFactory: ContainerFactory,
             poolConfig: ContainerPoolConfig,
             feed: ActorRef,
             prewarmConfig: List[PrewarmingConfig] = List.empty) =
-    Props(new ContainerPool(factory, feed, prewarmConfig, poolConfig))
+    Props(new ContainerPool(factory, containerFactory, feed, prewarmConfig, poolConfig))
 }
 
 /** Contains settings needed to perform container prewarming. */

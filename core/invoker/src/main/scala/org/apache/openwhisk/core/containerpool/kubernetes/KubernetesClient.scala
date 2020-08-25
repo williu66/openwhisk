@@ -43,7 +43,7 @@ import org.apache.openwhisk.common.{ConfigMapValue, Logging, TransactionId}
 import org.apache.openwhisk.core.ConfigKeys
 import org.apache.openwhisk.core.containerpool.docker.ProcessRunner
 import org.apache.openwhisk.core.containerpool.{ContainerAddress, ContainerId}
-import org.apache.openwhisk.core.entity.ByteSize
+import org.apache.openwhisk.core.entity.{ByteSize, SizeUnits}
 import org.apache.openwhisk.core.entity.size._
 import pureconfig._
 import pureconfig.generic.auto._
@@ -54,7 +54,7 @@ import scala.annotation.tailrec
 import scala.collection.immutable.Queue
 import scala.collection.mutable
 import scala.concurrent.duration._
-import scala.concurrent.{blocking, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, blocking}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
@@ -104,6 +104,21 @@ class KubernetesClient(
   }
 
   private val podBuilder = new WhiskPodBuilder(kubeRestClient, config.userPodNodeAffinity, config.podTemplate)
+
+  def getInvokerNodesTotalMemory(): ByteSize = {
+    var totalMemory: ByteSize = new ByteSize(0, SizeUnits.MB)
+
+    val namespace = kubeRestClient.getNamespace
+    val nodes = kubeRestClient.inNamespace(namespace).nodes.withLabelIn("openwhisk-role", "invoker")
+    nodes.list.getItems.forEach(n => {
+      var strMemory = n.getStatus.getCapacity.getOrDefault("memory", new Quantity("0Mi")).getAmount.replace("i", "")
+      // 每个node的内存实际利用需要去掉4GB，如32GB的主机，node中为32GB，而invoker中实际又只能用到27.9GB的样子
+      val memory = ByteSize.fromString(strMemory) - ByteSize(6, SizeUnits.GB)
+      totalMemory += memory
+      log.info(this, s"getInvokerNodesTotalMemory node: ${ByteSize.fromString(strMemory).toMB}, ${memory.toMB}")
+    })
+    totalMemory
+  }
 
   def run(name: String,
           image: String,
@@ -310,6 +325,8 @@ trait KubernetesApi {
 
   def logs(container: KubernetesContainer, sinceTime: Option[Instant], waitForSentinel: Boolean = false)(
     implicit transid: TransactionId): Source[TypedLogLine, Any]
+  /** 查询集群中invoker node总内存 */
+  def getInvokerNodesTotalMemory(): ByteSize
 }
 
 object KubernetesRestLogSourceStage {

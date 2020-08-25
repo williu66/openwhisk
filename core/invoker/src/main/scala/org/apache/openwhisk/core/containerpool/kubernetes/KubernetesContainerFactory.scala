@@ -59,6 +59,10 @@ class KubernetesContainerFactory(
     Await.ready(cleaning, 30.seconds)
   }
 
+  override def getInvokerNodesTotalMemory(): ByteSize = {
+    kubernetes.getInvokerNodesTotalMemory()
+  }
+
   override def createContainer(
                        tid: TransactionId,
                        name: String,

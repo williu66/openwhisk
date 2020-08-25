@@ -70,6 +70,12 @@ object MessageFeed {
   /** Steady state message, indicates capacity in downstream process to receive more messages. */
   object Processed
 
+  /** 集群内存改变，通知feed handlerCapacity 增加值*/
+  case class ContainerPoolMemoryChanged(val newDockerCount:Int = 0)
+//  object ContainerPoolMemoryChanged{
+//    var newDockerCount:Int = 0
+//  }
+
   /** Indicates the fill operation has completed. */
   private case class FillCompleted(messages: Seq[(String, Int, Long, Array[Byte])])
 }
@@ -129,6 +135,10 @@ class MessageFeed(description: String,
       fillPipeline()
       goto(FillingPipeline)
 
+    case Event(ContainerPoolMemoryChanged(newDockerCount), _) =>
+      updateHandlerCapacity("Idle", newDockerCount)
+      stay
+
     case _ => stay
   }
 
@@ -151,6 +161,10 @@ class MessageFeed(description: String,
         goto(DrainingPipeline)
       }
 
+    case Event(ContainerPoolMemoryChanged(newDockerCount), _) =>
+      updateHandlerCapacity("FillingPipeline", newDockerCount)
+      stay
+
     case _ => stay
   }
 
@@ -162,6 +176,10 @@ class MessageFeed(description: String,
         fillPipeline()
         goto(FillingPipeline)
       } else stay
+
+    case Event(ContainerPoolMemoryChanged(newDockerCount), _) =>
+      updateHandlerCapacity("DrainingPipeline", newDockerCount)
+      stay
 
     case _ => stay
   }
@@ -184,6 +202,11 @@ class MessageFeed(description: String,
           // state with enough buffering (i.e., maxPipelineDepth > maxPeek), the latency
           // of the commit should be masked.
           val records = consumer.peek(longPollDuration)
+
+          logging.info(this,
+            s"""
+               |-----> peek ************
+               |peek ${records.toSeq.size} """.stripMargin)
           consumer.commit()
           FillCompleted(records.toSeq)
         }
@@ -216,6 +239,11 @@ class MessageFeed(description: String,
       handler(bytes)
       handlerCapacity -= 1
 
+      logging.info(this,
+        s"""
+           |-----> processing ************
+           |processing $topic[$partition][$offset] ($occupancy/$handlerCapacity)""".stripMargin)
+
       sendOutstandingMessages()
     }
   }
@@ -233,15 +261,28 @@ class MessageFeed(description: String,
     }
   }
 
-  private def updateHandlerCapacity(): Int = {
-    logging.debug(self, s"$description received processed msg, current capacity = $handlerCapacity")
+  private def updateHandlerCapacity(eventMsg: String = null, newDockerCount: Int = 0): Int = {
+    if (eventMsg == null) {
+      logging.debug(self, s"$description received processed msg, current capacity = $handlerCapacity")
 
-    if (handlerCapacity < maximumHandlerCapacity) {
-      handlerCapacity += 1
+      if (handlerCapacity < maximumHandlerCapacity) {
+        handlerCapacity += 1
+        handlerCapacity
+      } else {
+        if (handlerCapacity > maximumHandlerCapacity) logging.error(self, s"$description capacity already at max")
+        maximumHandlerCapacity
+      }
+    }
+    else {
+      val old = handlerCapacity
+      handlerCapacity = (handlerCapacity + newDockerCount).max(0)
+      logging.info(this,
+        s"""
+           |-----------------> ContainerPoolMemoryChanged ${eventMsg} ************
+           | old: ${old}
+           | newDockerCount: ${newDockerCount}
+           | new: ${handlerCapacity}""".stripMargin)
       handlerCapacity
-    } else {
-      if (handlerCapacity > maximumHandlerCapacity) logging.error(self, s"$description capacity already at max")
-      maximumHandlerCapacity
     }
   }
 }

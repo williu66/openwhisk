@@ -20,7 +20,7 @@ package org.apache.openwhisk.core.containerpool
 import akka.actor.ActorSystem
 import org.apache.openwhisk.common.{Logging, TransactionId}
 import org.apache.openwhisk.core.WhiskConfig
-import org.apache.openwhisk.core.entity.{ByteSize, ExecManifest, ExecutableWhiskAction, InvokerInstanceId}
+import org.apache.openwhisk.core.entity.{ByteSize, ExecManifest, ExecutableWhiskAction, InvokerInstanceId, SizeUnits}
 import org.apache.openwhisk.spi.Spi
 
 import scala.concurrent.Future
@@ -43,7 +43,7 @@ case class ContainerArgsConfig(network: String,
     }.toMap
 }
 
-case class ContainerPoolConfig(userMemory: ByteSize, concurrentPeekFactor: Double, akkaClient: Boolean) {
+case class ContainerPoolConfig(var userMemory: ByteSize, concurrentPeekFactor: Double, akkaClient: Boolean) {
   require(
     concurrentPeekFactor > 0 && concurrentPeekFactor <= 1.0,
     s"concurrentPeekFactor must be > 0 and <= 1.0; was $concurrentPeekFactor")
@@ -112,6 +112,11 @@ trait ContainerFactory {
 
   /** cleanup any remaining Containers; should block until complete; should ONLY be run at startup/shutdown */
   def cleanup(): Unit
+
+  /** 查询集群中invoker node总内存 */
+  def getInvokerNodesTotalMemory(): ByteSize = {
+    ByteSize(0, SizeUnits.BYTE)
+  }
 }
 
 object ContainerFactory {
