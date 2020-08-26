@@ -206,7 +206,8 @@ class MessageFeed(description: String,
           logging.info(this,
             s"""
                |-----> peek ************
-               |peek ${records.toSeq.size} """.stripMargin)
+               |peek: ${records.toSeq.size}
+               |handlerCapacity: ${handlerCapacity}""".stripMargin)
           consumer.commit()
           FillCompleted(records.toSeq)
         }
@@ -242,7 +243,8 @@ class MessageFeed(description: String,
       logging.info(this,
         s"""
            |-----> processing ************
-           |processing $topic[$partition][$offset] ($occupancy/$handlerCapacity)""".stripMargin)
+           |processing $topic[$partition][$offset] ($occupancy/$handlerCapacity)
+           |handlerCapacity: ${handlerCapacity}""".stripMargin)
 
       sendOutstandingMessages()
     }

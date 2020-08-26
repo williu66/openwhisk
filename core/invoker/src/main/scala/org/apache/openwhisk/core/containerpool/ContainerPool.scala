@@ -80,8 +80,14 @@ class ContainerPool(childFactory: ActorRefFactory => ActorRef,
   val logMessageInterval = 10.seconds
   //periodically emit metrics (don't need to do this for each message!)
   context.system.scheduler.schedule(30.seconds, 10.seconds, self, EmitMetrics)
-
+  //invoker 重启后，需要先更新下
+  updateUserMemory(false)
+  //定时更新
   context.system.scheduler.schedule(30.seconds, 30.seconds){
+    updateUserMemory(true)
+  }
+
+  def updateUserMemory(needUpdateMessageFeed: Boolean): Unit ={
     try {
       var totalMemory = containerFactory.getInvokerNodesTotalMemory() / 2
       logging.info(this,
@@ -89,14 +95,18 @@ class ContainerPool(childFactory: ActorRefFactory => ActorRef,
            |------> getInvokerNodesTotalMemory
            |last userMemory: ${poolConfig.userMemory.toMB} MB
            |current userMemory: ${totalMemory.toMB} MB
+           |busyPool space: ${memoryConsumptionOf(busyPool)}
+           |busyPool size: ${busyPool.size}
+           |freePool size: ${freePool.size}
+           |runBuffer size: ${runBuffer.size}
            |""".stripMargin)
-      if (poolConfig.userMemory != totalMemory) {
+      if (totalMemory.toMB > 0 && poolConfig.userMemory != totalMemory) {
         poolConfig.userMemory = totalMemory
-
-        val newDockerCount = ((totalMemory.toMB - memoryConsumptionOf(busyPool)) / 512).toInt
-        feed ! MessageFeed.ContainerPoolMemoryChanged(newDockerCount)
+        if (needUpdateMessageFeed) {
+          val newDockerCount = ((totalMemory.toMB - memoryConsumptionOf(busyPool)) / 512).toInt
+          feed ! MessageFeed.ContainerPoolMemoryChanged(newDockerCount)
+        }
       }
-
     } catch {
       case e: Exception => logging.warn(this, s""" getInvokerNodesTotalMemory exception: ${e}""")
     }
