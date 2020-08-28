@@ -82,7 +82,7 @@ class KubernetesContainerFactory(
       }
     }
 
-    logging.info(this, s"nodeAffinities is: ${nodeAffinities}")
+    logging.debug(this, s"nodeAffinities is: ${nodeAffinities}")
 
     KubernetesContainer.create(
       tid,

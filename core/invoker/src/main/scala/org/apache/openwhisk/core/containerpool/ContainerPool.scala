@@ -150,7 +150,7 @@ class ContainerPool(childFactory: ActorRefFactory => ActorRef,
           resent = None
         }
 
-        logging.info(
+        logging.debug(
           this,
           s"""
              |------>

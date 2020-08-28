@@ -203,7 +203,7 @@ class MessageFeed(description: String,
           // of the commit should be masked.
           val records = consumer.peek(longPollDuration)
 
-          logging.info(this,
+          logging.debug(this,
             s"""
                |-----> peek ************
                |peek: ${records.toSeq.size}
@@ -240,7 +240,7 @@ class MessageFeed(description: String,
       handler(bytes)
       handlerCapacity -= 1
 
-      logging.info(this,
+      logging.debug(this,
         s"""
            |-----> processing ************
            |processing $topic[$partition][$offset] ($occupancy/$handlerCapacity)
